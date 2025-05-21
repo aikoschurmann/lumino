@@ -2,7 +2,14 @@
 #include "primitives.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#include <math.h>
+#ifdef __ARM_NEON__
+#include <arm_neon.h>
+#endif
 
+float min(float a, float b) {
+    return (a < b) ? a : b;
+}
 
 // load_png
 lumino_sprite lumino_load_png(LuminoRenderer* renderer, const char* filename) {
@@ -31,9 +38,9 @@ lumino_sprite lumino_load_png(LuminoRenderer* renderer, const char* filename) {
     // copy the pixel data from the image to the sprite data
     for (size_t i = 0; i < pixelCount; ++i) {
         // convert the RGBA pixel to an index in the palette
-        uint8_t b = image[i * 4 + 0]; // r
+        uint8_t r = image[i * 4 + 0]; // r
         uint8_t g = image[i * 4 + 1]; // g
-        uint8_t r = image[i * 4 + 2]; // b
+        uint8_t b = image[i * 4 + 2]; // b
         uint8_t a = image[i * 4 + 3]; // a
 
         // find the index in the palette
@@ -58,9 +65,10 @@ lumino_sprite lumino_load_png(LuminoRenderer* renderer, const char* filename) {
 
 // Scalar copy
 static void lumino_draw_sprite_scalar(LuminoRenderer* R,
-                                      int x, int y,
                                       lumino_sprite sprite)
 {
+    int x = sprite.x;
+    int y = sprite.y;
     uint32_t* fb    = R->internal_framebuffer;
     int       fbw   = R->internal_width;
     int       fb_h  = R->internal_height;
@@ -81,9 +89,10 @@ static void lumino_draw_sprite_scalar(LuminoRenderer* R,
 
 // Scalar blend
 void lumino_draw_sprite_scalar_blend(LuminoRenderer* R,
-                                            int x, int y,
                                             lumino_sprite sprite)
 {
+    int x = sprite.x;
+    int y = sprite.y;
     int       fbw   = R->internal_width;
     int       fb_h  = R->internal_height;
     int       w     = sprite.width;
@@ -101,12 +110,11 @@ void lumino_draw_sprite_scalar_blend(LuminoRenderer* R,
     }
 }
 
-#ifdef __ARM_NEON__
-// NEON copy (4 pixels at a time)
 static void lumino_draw_sprite_neon(LuminoRenderer* R,
-                                    int x, int y,
                                     lumino_sprite sprite)
 {
+    int x = sprite.x;
+    int y = sprite.y;
     uint32_t* fb    = R->internal_framebuffer;
     int       fbw   = R->internal_width;
     int       fb_h  = R->internal_height;
@@ -114,29 +122,46 @@ static void lumino_draw_sprite_neon(LuminoRenderer* R,
     int       h     = sprite.height;
     uint32_t* src   = (uint32_t*)sprite.data;
 
+    // Byte shuffle indices to swap R and B in each pixel: [2,1,0,3] per pixel
+    static const uint8_t shuffle_idx_data[16] = {
+        2, 1, 0, 3,  6, 5, 4, 7,
+       10, 9, 8,11, 14,13,12,15
+    };
+    const uint8x16_t shuffle_idx = vld1q_u8(shuffle_idx_data);
+
     for (int row = 0; row < h; row++) {
         int yy = y + row;
         if ((unsigned)yy >= (unsigned)fb_h) continue;
         uint32_t* dst = fb + yy * fbw + x;
         int col = 0;
-        // bulk copy
+        // bulk copy with R/B swap
         for (; col <= w - 4; col += 4) {
-            vst1q_u32(dst + col, vld1q_u32(src + row * w + col));
+            uint32x4_t pixels = vld1q_u32(src + row * w + col);
+            uint8x16_t bytes  = vreinterpretq_u8_u32(pixels);
+            uint8x16_t out    = vqtbl1q_u8(bytes, shuffle_idx);
+            vst1q_u32(dst + col, vreinterpretq_u32_u8(out));
         }
-        // tail
+        // tail pixels
         for (; col < w; col++) {
-            dst[col] = src[row * w + col];
+            uint32_t p = src[row * w + col];
+            uint8_t* c = (uint8_t*)&p;
+            // assuming little-endian RGBA in memory: [B,G,R,A]
+            uint8_t b = c[0], g = c[1], r = c[2], a = c[3];
+            uint32_t swapped = (a << 24) | (b << 16) | (g << 8) | r;
+            // after swap: memory [R,G,B,A]
+            dst[col] = swapped;
         }
     }
 }
-#endif
+
 
 #ifdef __ARM_NEON__
 // NEON blend (4 pixels at a time) via vld4/vst4
 static void lumino_draw_sprite_neon_blend(LuminoRenderer* R,
-                                          int x, int y,
                                           lumino_sprite sprite)
-{
+{   
+    int x = sprite.x;
+    int y = sprite.y;
     uint8_t* fb_bytes = (uint8_t*)R->internal_framebuffer;
     int fbw = R->internal_width;
     int fbh = R->internal_height;
@@ -158,9 +183,9 @@ static void lumino_draw_sprite_neon_blend(LuminoRenderer* R,
             uint8x8x4_t d = vld4_u8(dst_row + col*4);
 
             // widen to 16-bit
-            uint16x8_t sr = vmovl_u8(s.val[0]);
+            uint16x8_t sr = vmovl_u8(s.val[2]);
             uint16x8_t sg = vmovl_u8(s.val[1]);
-            uint16x8_t sb = vmovl_u8(s.val[2]);
+            uint16x8_t sb = vmovl_u8(s.val[0]);
             uint16x8_t sa = vmovl_u8(s.val[3]);
 
             uint16x8_t dr = vmovl_u8(d.val[0]);
@@ -202,19 +227,100 @@ static void lumino_draw_sprite_neon_blend(LuminoRenderer* R,
 
 
 
-void lumino_draw_sprite(LuminoRenderer* renderer, int x, int y, lumino_sprite sprite) {
+void lumino_draw_sprite(LuminoRenderer* renderer, lumino_sprite sprite) {
 #if defined(__ARM_NEON__)
-    lumino_draw_sprite_neon(renderer, x, y, sprite);
+    lumino_draw_sprite_neon(renderer, sprite);
 #else
     lumino_draw_sprite_scalar(renderer, x, y, sprite);
 #endif
 }
 
 // Important Note: This function is not optimized for NEON yet so only use blend when needed
-void lumino_draw_sprite_blend(LuminoRenderer* renderer, int x, int y, lumino_sprite sprite) {
+void lumino_draw_sprite_blend(LuminoRenderer* renderer, lumino_sprite sprite) {
 #if defined(__ARM_NEON__) && !defined(LUMINO_NO_NEON)
-    lumino_draw_sprite_neon_blend(renderer, x, y, sprite);
+    lumino_draw_sprite_neon_blend(renderer, sprite);
 #else
     lumino_draw_sprite_scalar_blend(renderer, x, y, sprite);
 #endif
+}
+
+
+// simple point‐light, flat shading (normal = (0,0,1))
+// ----------------------------------------------------------------------------
+void lumino_draw_sprite_lit(LuminoRenderer* R,
+                             lumino_sprite sprite,
+                             lumino_light light,
+                             float ambient)
+{
+    int fbw = R->internal_width;
+    int fbh = R->internal_height;
+    uint32_t* fb = R->internal_framebuffer;
+    int w = sprite.width;
+    int h = sprite.height;
+    uint32_t* src = sprite.data;
+
+    // Precompute squared range and its inverse
+    float range_sq    = light.range * light.range;
+    float inv_range_sq = 1.0f / range_sq;
+
+    // Normalize light color to [0..1]
+    float light_r = light.color.r / 255.0f;
+    float light_g = light.color.g / 255.0f;
+    float light_b = light.color.b / 255.0f;
+
+    for (int row = 0; row < h; row++) {
+        int yy = sprite.y + row;
+        if ((unsigned)yy >= (unsigned)fbh) continue;
+
+        for (int col = 0; col < w; col++) {
+            int xx = sprite.x + col;
+            if ((unsigned)xx >= (unsigned)fbw) continue;
+
+            int idx = row * w + col;
+            uint32_t c_src = src[idx];
+            lumino_color c = {
+                .r = (c_src      ) & 0xFF,
+                .g = (c_src >>  8) & 0xFF,
+                .b = (c_src >> 16) & 0xFF,
+                .a = (c_src >> 24) & 0xFF
+            };
+            if (c.a == 0) continue;
+
+            // squared distance
+            int dx = xx - light.x;
+            int dy = yy - light.y;
+            float dist_sq = (float)(dx*dx + dy*dy);
+
+            if (dist_sq >= range_sq) {
+                // outside the light radius → only ambient
+                uint32_t col_amb = lumino_get_color((lumino_color){
+                    (uint8_t)(c.r * ambient),
+                    (uint8_t)(c.g * ambient),
+                    (uint8_t)(c.b * ambient),
+                    c.a
+                });
+                fb[yy * fbw + xx] = col_amb;
+                continue;
+            }
+
+            // attenuation = (1 - (dist^2 / R^2)) * intensity
+            float atten = (1.0f - dist_sq * inv_range_sq) * light.intensity;
+
+            // combine ambient + light; convert c to [0..1] first
+            float sr = c.r / 255.0f;
+            float sg = c.g / 255.0f;
+            float sb = c.b / 255.0f;
+
+            float out_r = (sr * ambient + sr * atten * light_r);
+            float out_g = (sg * ambient + sg * atten * light_g);
+            float out_b = (sb * ambient + sb * atten * light_b);
+
+            // back to 0..255 and clamp
+            uint8_t fr = (uint8_t)(fminf(fmaxf(out_r * 255.0f, 0.0f), 255.0f));
+            uint8_t fg = (uint8_t)(fminf(fmaxf(out_g * 255.0f, 0.0f), 255.0f));
+            uint8_t fb_ = (uint8_t)(fminf(fmaxf(out_b * 255.0f, 0.0f), 255.0f));
+
+            fb[yy * fbw + xx] = lumino_get_color((lumino_color){fr, fg, fb_, c.a});
+        }
+    }
 }

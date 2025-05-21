@@ -13,6 +13,12 @@
 #define LUMINO_INVALID_UPSCALE 3
 #define LUMINO_DIMS_NOT_DIVISIBLE_BY_4 4
 
+int mouse_location[2];
+int mouse_clicked;
+
+static const Uint8 *keyboard_state;
+static Uint8 previous_keyboard_state[SDL_NUM_SCANCODES]; // Previous keyboard state
+
 // Define the structure to hold rendering state
 // index_buffer holds the value of the color in the palette
 // this gets transformed into the internal framebuffer
@@ -48,7 +54,41 @@ typedef struct  {
     
 } lumino_color;
 
+typedef struct lumino_light {
+    // Position in world‐space
+    float x, y, z;
+
+    // Color & intensity
+    lumino_color color;     // e.g. {r, g, b} each in [0…1] or [0…255]
+    float intensity;        // overall brightness multiplier
+
+    // Attenuation (range‐based falloff)
+    float range;            // maximum distance light reaches
+    float inv_range_sq;     // precomputed 1.0f / (range * range)
+
+    // Runtime toggle
+    int enabled;           // quickly turn on/off without removing
+
+} lumino_light;
+
+
 // Function prototypes
+
+// input keys
+void lumino_initialize_keyboard_state(void);
+
+void lumino_update_keyboard_state(void);
+
+// Check if a key is pressed
+int lumino_is_key_pressed(SDL_Scancode key);
+
+// Check if a key is down
+int lumino_is_key_down(SDL_Scancode key);
+
+// Check if a key is up
+int lumino_is_key_up(SDL_Scancode key);
+
+
 
 // Initialize the renderer with specific width, height, and internal resolution
 int lumino_init(LuminoRenderer* renderer, int upscale_factor, int internal_width, int internal_height);

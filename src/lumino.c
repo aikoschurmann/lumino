@@ -16,6 +16,14 @@ static int running = 1;
 static int frame_count = 0;
 static Uint32 last_time = 0;
 
+static const Uint8 *keyboard_state = NULL; // Current keyboard state
+static Uint8 previous_keyboard_state[SDL_NUM_SCANCODES]; // Previous keyboard state
+
+
+int mouse_location[2] = {0, 0};
+int mouse_clicked = 0;
+int mouse_down = 0;
+
 
 // Buffer flow:
 // +-----------------+        +----------------+        +------------------+        +-------------------+
@@ -26,6 +34,28 @@ static Uint32 last_time = 0;
 // 1 SDL_UpdateTexture(texture, NULL, framebuffer, LUMINO_WIDTH * sizeof(uint32_t));
 // 2 SDL_RenderCopy(renderer, texture, NULL, NULL);
 // 3 SDL_RenderPresent(renderer);
+
+void lumino_initialize_keyboard_state() {
+    keyboard_state = SDL_GetKeyboardState(NULL);
+    memcpy(previous_keyboard_state, keyboard_state, sizeof(previous_keyboard_state));
+}
+
+void lumino_update_keyboard_state() {
+    memcpy(previous_keyboard_state, keyboard_state, sizeof(previous_keyboard_state));
+    keyboard_state = SDL_GetKeyboardState(NULL);
+}
+
+int lumino_is_key_pressed(SDL_Scancode key) {
+    return keyboard_state && keyboard_state[key];
+}
+
+int lumino_is_key_down(SDL_Scancode key) {
+    return keyboard_state && keyboard_state[key] && !previous_keyboard_state[key];
+}
+
+int lumino_is_key_up(SDL_Scancode key) {
+    return keyboard_state && !keyboard_state[key] && previous_keyboard_state[key];
+}
 
 // initialize the lumino renderer returns 0 on success and 1 on failure
 int lumino_renderer_init(LuminoRenderer* renderer, int upscale_factor, int internal_width, int internal_height) {
@@ -42,6 +72,8 @@ int lumino_renderer_init(LuminoRenderer* renderer, int upscale_factor, int inter
     if (internal_width % 4 != 0 || internal_height % 4 != 0) {
         return LUMINO_DIMS_NOT_DIVISIBLE_BY_4;  // Invalid internal dimensions
     }
+
+    lumino_initialize_keyboard_state();
 
     // Initialize the renderer structure
     renderer->palette_size = 1;  // Initialize palette size
@@ -145,10 +177,32 @@ void lumino_shutdown(LuminoRenderer* renderer) {
 // Check if the window should continue running (basic SDL event handling)
 int lumino_should_run(void) {
     SDL_Event event;
+    lumino_update_keyboard_state();
+
     while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_QUIT) {
-            running = 0;
-        }
+        switch (event.type) {
+            case SDL_QUIT:
+                running = 0;
+                break;
+            case SDL_MOUSEBUTTONDOWN:
+                mouse_location[0] = event.button.x;
+                mouse_location[1] = event.button.y;
+                if (mouse_clicked == 0) {
+                    mouse_clicked = 1;
+                } else if (mouse_clicked == 1) {
+                    mouse_clicked = 2;
+                }
+
+                mouse_down = 1;
+
+                break;
+            case SDL_MOUSEBUTTONUP:
+                mouse_down = 0;
+                mouse_clicked = 0;
+                break;
+            default:
+                break;
+            }
     }
     return running;
 }
@@ -159,7 +213,7 @@ void lumino_clear(LuminoRenderer* renderer) {
 }
 
 inline uint32_t lumino_get_color(lumino_color color) {
-    return (color.a << 24) | (color.b << 16) | (color.g << 8) | color.r;
+    return (color.a << 24) | (color.r << 16) | (color.g << 8) | color.b;
 }
 
 

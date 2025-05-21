@@ -2,7 +2,10 @@
 
 **Lumino** is a minimal, high-performance 2D graphics library written in C. It runs entirely on the CPU, supporting real-time pixel rendering with palette-based color, normal maps for lighting, and SIMD acceleration. Designed for pixel art games and retro-style engines, Lumino is ideal for systems without a GPU or for total control over your rendering pipeline.
 
+![demo](image.png)
+
 ---
+
 
 ## ✨ Features
 
