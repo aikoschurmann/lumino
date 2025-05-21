@@ -69,9 +69,6 @@ int lumino_renderer_init(LuminoRenderer* renderer, int upscale_factor, int inter
             return LUMINO_FAILURE;  // Invalid upscale factor
     }
 
-    // Initialize the index buffer (1 byte per pixel)
-    renderer->index_buffer = (uint8_t*)malloc(internal_width * internal_height * sizeof(uint8_t));
-    
     // Allocate memory for the internal framebuffer
     renderer->internal_framebuffer = (uint32_t*)malloc(internal_width * internal_height * sizeof(uint32_t));
     if (!renderer->internal_framebuffer) {
@@ -158,9 +155,12 @@ int lumino_should_run(void) {
 
 // Clear the framebuffer to black
 void lumino_clear(LuminoRenderer* renderer) {
-    memset(renderer->index_buffer, 0, renderer->internal_width * renderer->internal_height * sizeof(uint8_t));
+    memset(renderer->internal_framebuffer, 0, renderer->internal_width * renderer->internal_height * sizeof(uint32_t));
 }
 
+inline uint32_t lumino_get_color(lumino_color color) {
+    return (color.a << 24) | (color.b << 16) | (color.g << 8) | color.r;
+}
 
 
 // Add a color to the palette
@@ -177,7 +177,7 @@ void lumino_add_palette_color(LuminoRenderer* renderer, uint8_t r, uint8_t g, ui
 // Present the framebuffer to the window
 void lumino_present(LuminoRenderer* renderer) {
     // convert the index buffer to the internal framebuffer
-    palette_convert(renderer->internal_framebuffer, renderer->index_buffer, (uint8_t*)renderer->palette, renderer->width * renderer->height);
+    //palette_convert(renderer->internal_framebuffer, renderer->index_buffer, (uint8_t*)renderer->palette, renderer->width * renderer->height);
    
 
     if(renderer->upscale_fn){
@@ -197,6 +197,17 @@ void lumino_present(LuminoRenderer* renderer) {
     
     // Swap the back buffer to the front buffer, making the updated frame visible
     SDL_RenderPresent(sdl_renderer);
+
+    frame_count++;
+    Uint32 current_time = SDL_GetTicks();
+    if (current_time - last_time >= 1000) {
+        // set title to FPS
+        char title[256];
+        snprintf(title, sizeof(title), "FPS: %d", frame_count);
+        SDL_SetWindowTitle(window, title);
+        frame_count = 0;
+        last_time = current_time;
+    }
 
 }
 

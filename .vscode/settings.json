@@ -4,6 +4,8 @@
         "ios": "c",
         "arm_neon.h": "c",
         "lodepng.h": "c",
-        "lumino.h": "c"
+        "lumino.h": "c",
+        "upscale.h": "c",
+        "stdlib.h": "c"
     }
 }

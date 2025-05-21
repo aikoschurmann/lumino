@@ -5,6 +5,7 @@
 #include <SDL.h>
 #include "upscale.h"
 
+//#define LUMINO_NO_NEON 
 
 #define LUMINO_SUCCESS 0
 #define LUMINO_FAILURE 1
@@ -22,11 +23,8 @@ typedef struct {
     uint8_t palette[256 * 4];            // Color palette (RGBA)
     uint8_t palette_size;                // current size of the palette
 
-    // 1-byte per pixel: stores palette indices (0–255)
-    // Draw calls write into this buffer
-    uint8_t* index_buffer;              
-    
-    // Expanded 32-bit RGBA colors at internal resolution (4 bytes per pixel)
+        
+    // 
     // result of palette lookup for each index
     uint32_t* internal_framebuffer;      
     
@@ -41,6 +39,14 @@ typedef struct {
     int upscale_factor;                  // Upscale factor for internal framebuffer
     void (*upscale_fn)(uint32_t* out, const uint32_t* in, int width, int height); // Function pointer for upscaling
 } LuminoRenderer;
+
+typedef struct  {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    uint8_t a;
+    
+} lumino_color;
 
 // Function prototypes
 
@@ -68,4 +74,7 @@ void lumino_add_palette_color(LuminoRenderer* renderer, uint8_t r, uint8_t g, ui
 void lumino_get_error(int error_code, char* error_message, size_t message_size);
 
 lumino_pallette_contains_color(uint8_t* palette, int palette_size, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+
+
+uint32_t lumino_get_color(lumino_color color);
 #endif // LUMINO_H

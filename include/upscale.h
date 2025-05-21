@@ -3,6 +3,7 @@
 
 #ifdef __ARM_NEON__
 #include <arm_neon.h>
+#include "lumino.h"
 #endif
 #include <stdint.h>
 

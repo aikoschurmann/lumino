@@ -1,5 +1,5 @@
-obj/main.o: src/main.c include/lumino.h /opt/homebrew/include/SDL2/SDL.h \
-  /opt/homebrew/include/SDL2/SDL_main.h \
+obj/sprite.o: src/sprite.c include/sprite.h include/lumino.h \
+  /opt/homebrew/include/SDL2/SDL.h /opt/homebrew/include/SDL2/SDL_main.h \
   /opt/homebrew/include/SDL2/SDL_stdinc.h \
   /opt/homebrew/include/SDL2/SDL_config.h \
   /opt/homebrew/include/SDL2/SDL_platform.h \
@@ -48,7 +48,9 @@ obj/main.o: src/main.c include/lumino.h /opt/homebrew/include/SDL2/SDL.h \
   /opt/homebrew/include/SDL2/SDL_version.h \
   /opt/homebrew/include/SDL2/SDL_locale.h \
   /opt/homebrew/include/SDL2/SDL_misc.h include/upscale.h \
-  include/primitives.h include/sprite.h
+  include/primitives.h include/stb_image.h
+
+include/sprite.h:
 
 include/lumino.h:
 
@@ -156,4 +158,4 @@ include/upscale.h:
 
 include/primitives.h:
 
-include/sprite.h:
+include/stb_image.h:

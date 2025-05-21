@@ -1,18 +1,15 @@
 #include "lumino.h"
 #include "primitives.h"
+#include "sprite.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
 #define WIDTH 100
 #define HEIGHT 100
-#define UPSCALE_FACTOR 4
+#define UPSCALE_FACTOR 8
 
-// Function to generate random integers in a given range
-int random_in_range(int min, int max) {
-    return min + rand() % (max - min + 1);
-}
-
+// Function to draw a sprite at a specific position
 int main() {
     LuminoRenderer renderer;
     float time = 0.0f;  
@@ -22,10 +19,12 @@ int main() {
     // Initialize Lumino renderer
     int result = lumino_init(&renderer, UPSCALE_FACTOR, WIDTH, HEIGHT);
 
-
     // Load sprite
-    int sprite_width, sprite_height;
-    uint8_t* sprite = lumino_load_png(&renderer, "images/sprite.png", &sprite_width, &sprite_height);
+    lumino_sprite sprite = lumino_load_png(&renderer, "images/sprite.png");
+    if (sprite.data == NULL) {
+        fprintf(stderr, "Failed to load sprite\n");
+        return 1;
+    }
 
     // Main render loop
     while (lumino_should_run()) {
@@ -37,18 +36,28 @@ int main() {
         // Clear the screen
         lumino_clear(&renderer);
 
-        // Draw the sprite at position (20, 20)
-        lumino_draw_sprite(&renderer, 20, 20, sprite, sprite_width, sprite_height);
+        // draw sprite
+        for (int i = 0; i < 10000; ++i) {
+            int x = rand() % WIDTH ;
+            int y = rand() % HEIGHT ;
+            lumino_draw_sprite_blend(&renderer, x, y, sprite);  // Draw the sprite at random position
+        }
 
-        // Increment time to animate the spiral (optional)
-        time += delta_time * 0.05f;  // Adjust the speed of the spiral (if needed)
+        
+        
+
+        // draw a line
+        lumino_draw_line_blend(&renderer, 0, 0, 100, 100, (lumino_color){255, 255, 255, 100}); // White line
+        
+
+        time += delta_time * 0.05f;  
 
         // Present the rendered frame
         lumino_present(&renderer);
     }
 
     // Clean up
-    free(sprite);  // Free the loaded sprite
+    free(sprite.data);  // Free the loaded sprite
     lumino_shutdown(&renderer);
 
     return 0;
